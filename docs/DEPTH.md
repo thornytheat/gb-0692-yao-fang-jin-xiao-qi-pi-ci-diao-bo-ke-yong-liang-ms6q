@@ -1,8 +1,8 @@
 # 深度登记 药房近效期批次调拨与可用量
 
 - 规模：中型
-- 使用者与工作流：连锁药房库存核对员，汇集批号库存与调拨申请，按可用有效期安排门店补货。
-- 核心规则：FEFO仅分配到店后剩余有效期满足需求的库存；冻结量先扣，拆包需整包装，召回批不得调拨。
+- 使用者与工作流：连锁药房库存核对员，汇集批号库存与调拨申请，按可用有效期安排门店补货；门店盘点只报总数时，按批号对平可调拨量。
+- 核心规则：FEFO仅分配到店后剩余有效期满足需求的库存；冻结量先扣，拆包需整包装，召回批不得调拨。盘亏按效期从近到远挂待落实扣减，落实后转已落实，盘盈不推断批号、不入可拨。
 
 ## 功能模块
 
@@ -11,10 +11,11 @@
 | M1 库存接收 | 运行库存接收并复核证据 | `POST /api/m1`；`/work/1` | `app/modules/m1_receiving/rules.py` | `tests/test_m1.py` |
 | M2 批号裁决 | 运行批号裁决并复核证据 | `POST /api/m2`；`/work/2` | `app/modules/m2_lots/rules.py` | `tests/test_m2.py` |
 | M3 效期分层 | 运行效期分层并复核证据 | `POST /api/m3`；`/work/3` | `app/modules/m3_expiry/rules.py` | `tests/test_m3.py` |
-| M4 需求净额 | 运行需求净额并复核证据 | `POST /api/m4`；`/work/4` | `app/modules/m4_demand/rules.py` | `tests/test_m4.py` |
-| M5 调拨分配 | 运行调拨分配并复核证据 | `POST /api/m5`；`/work/5` | `app/modules/m5_allocation/rules.py` | `tests/test_m5.py` |
-| M6 收发对账 | 运行收发对账并复核证据 | `POST /api/m6`；`/work/6` | `app/modules/m6_reconcile/rules.py` | `tests/test_m6.py` |
-| M7 方案复核 | 运行方案复核并复核证据 | `POST /api/m7`；`/work/7` | `app/modules/m7_approval/rules.py` | `tests/test_m7.py` |
+| M4 盘点对平 | 运行盘点对平并复核证据 | `POST /api/m4`；`/work/4` | `app/modules/m4_count/rules.py` | `tests/test_m4.py` |
+| M5 需求净额 | 运行需求净额并复核证据 | `POST /api/m5`；`/work/5` | `app/modules/m5_demand/rules.py` | `tests/test_m5.py` |
+| M6 调拨分配 | 运行调拨分配并复核证据 | `POST /api/m6`；`/work/6` | `app/modules/m6_allocation/rules.py` | `tests/test_m6.py` |
+| M7 收发对账 | 运行收发对账并复核证据 | `POST /api/m7`；`/work/7` | `app/modules/m7_reconcile/rules.py` | `tests/test_m7.py` |
+| M8 方案复核 | 运行方案复核并复核证据 | `POST /api/m8`；`/work/8` | `app/modules/m8_approval/rules.py` | `tests/test_m8.py` |
 
 ## 陷阱登记
 
@@ -27,12 +28,16 @@
 | TRAP-14 | 同单冲突 | 静默覆盖或误计 | 显式裁决并保留证据 | `app/modules/m2_lots/rules.py` | `tests/test_m2.py::test_conflict_not_override` |
 | TRAP-19 | 召回优先 | 静默覆盖或误计 | 显式裁决并保留证据 | `app/modules/m2_lots/rules.py` | `tests/test_m2.py::test_recall_dominates` |
 | TRAP-23 | 效期端点 | 静默覆盖或误计 | 显式裁决并保留证据 | `app/modules/m3_expiry/rules.py` | `tests/test_m3.py::test_expired_isolated` |
-| TRAP-26 | 陈旧复核 | 静默覆盖或误计 | 显式裁决并保留证据 | `app/modules/m7_approval/rules.py` | `tests/test_m7.py::test_review_api_stale` |
+| TRAP-26 | 陈旧复核 | 静默覆盖或误计 | 显式裁决并保留证据 | `app/modules/m8_approval/rules.py` | `tests/test_m8.py::test_review_api_stale` |
+| TRAP-31 | 盘点只报总数 | 猜测批号或整类停发 | 盘亏按效期近远挂待落实扣减，盘盈不推断批号 | `app/modules/m4_count/rules.py` | `tests/test_m4.py::test_pending_shortage_follows_fefo_order` |
+| TRAP-32 | 同一盘点重跑 | 重复扣减 | 同单同内容计重复，同文重跑复用批次 | `app/modules/m2_lots/rules.py` | `tests/test_m4.py::test_rerun_never_double_deducts` |
+| TRAP-33 | 召回过期后盘面失真 | 沿用旧扣减 | 失效批从实盘扣减后重算扣减 | `app/modules/m4_count/rules.py` | `tests/test_m4.py::test_recall_recomputes_holds` |
+| TRAP-34 | 覆盖旧盘点 | 原盘面丢失 | 被覆盖盘点单保留并标记 | `app/modules/m4_count/rules.py` | `tests/test_m4.py::test_original_count_records_kept` |
 
 ## 对账规则
 
-输入记录 = 采信记录 + 隔离记录 + 相同行重复。重复表头与空行单独记数。业务合计按阶段中的守恒或差值列复核。运行清单有原文SHA256、规则版本与耗时；相同规则版本下同文重复提交复用批次。
+输入记录 = 采信记录 + 隔离记录 + 相同行重复。重复表头与空行单独记数。业务合计按阶段中的守恒或差值列复核。盘点对平恒等式：账面总数 − 待落实 − 已落实 − 未分摊 + 盘盈 = 实盘总数 − 失效批扣减；收发对账含“盘点对平(可售)”行，差额为零。运行清单有原文SHA256、规则版本与耗时；相同规则版本下同文重复提交复用批次。
 
 ## 已知不覆盖
 
-部署为本地单用户工具，不连接外部上游系统。CSV单文件5MB及一万条业务记录上限；不推断未提供的未知数据。
+部署为本地单用户工具，不连接外部上游系统。CSV单文件5MB及一万条业务记录上限；不推断未提供的未知数据。盘盈不归属具体批号，需查明后以新库存行入账。

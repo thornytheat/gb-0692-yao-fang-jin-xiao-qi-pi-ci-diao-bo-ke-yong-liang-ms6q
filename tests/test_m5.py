@@ -1,11 +1,10 @@
-from app.domain import allocate
-def test_allocations_whole_packages(ctx): assert all(a['调拨数量']%a['整包装']==0 for a in ctx['allocations'])
-def test_fefo_first(ctx): assert ctx['allocations'][0]['到期日']=='2026-12-02'
-def test_no_negative_remainder(ctx): assert min(ctx['remaining'].values())>=0
-def test_demand_cap(ctx): assert all(a['已分配']<=a['净需求'] for a in ctx['shortages'])
-def test_no_stock(ctx):
-    rows,left,short=allocate([],ctx['net_demands']);assert not rows and sum(x['缺口'] for x in short)==675
-def test_min_life_kept(ctx): assert all(a['到店余期_天']>=10 for a in ctx['allocations'])
-def test_deterministic_order(ctx):
-    assert allocate(list(reversed(ctx['usable'])),list(reversed(ctx['net_demands'])))[0]==ctx['allocations']
+from app.modules.m5_demand.rules import apply
+def test_net_need(ctx): assert ctx['net_demands'][0]['net_need']==29
+def test_total_need(ctx): assert sum(r['net_need'] for r in ctx['net_demands'])==675
+def test_store_count(ctx): assert len({r['store'] for r in ctx['net_demands']})==18
+def test_zero_need():
+    c={'demands':[{'qty_n':5,'frozen_n':5,'record':'x','store':'a','sku':'s','min_days_n':1}]};apply(c);assert c['net_demands'][0]['net_need']==0
+def test_no_demand(): assert apply({'demands':[]})['rows']==[]
+def test_date_retained(ctx): assert ctx['net_demands'][0]['arrival']=='2026-11-20'
+def test_sample_min_days(ctx): assert {r['min_days_n'] for r in ctx['net_demands']}=={10,11,12}
 

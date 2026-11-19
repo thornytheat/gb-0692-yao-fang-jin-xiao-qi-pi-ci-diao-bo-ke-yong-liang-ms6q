@@ -9,10 +9,11 @@ from app.web import bp as web
 from app.modules.m1_receiving.handler import bp as bp1
 from app.modules.m2_lots.handler import bp as bp2
 from app.modules.m3_expiry.handler import bp as bp3
-from app.modules.m4_demand.handler import bp as bp4
-from app.modules.m5_allocation.handler import bp as bp5
-from app.modules.m6_reconcile.handler import bp as bp6
-from app.modules.m7_approval.handler import bp as bp7
+from app.modules.m4_count.handler import bp as bp4
+from app.modules.m5_demand.handler import bp as bp5
+from app.modules.m6_allocation.handler import bp as bp6
+from app.modules.m7_reconcile.handler import bp as bp7
+from app.modules.m8_approval.handler import bp as bp8
 app=Flask(__name__)
 app.config['MAX_CONTENT_LENGTH']=5*1024*1024
 app.json.ensure_ascii=False
@@ -32,6 +33,7 @@ app.register_blueprint(bp4)
 app.register_blueprint(bp5)
 app.register_blueprint(bp6)
 app.register_blueprint(bp7)
+app.register_blueprint(bp8)
 @app.before_request
 def validate_request_object():
     if request.method!='POST': return None
@@ -72,6 +74,7 @@ def evidence():
     rows=[]
     for index,stage in result['stages'].items():
         rows.extend({'阶段':index,**r} for r in stage['rows'])
+        for extra in ('groups','counts'): rows.extend({'阶段':index,**r} for r in stage.get(extra,[]))
     rows.extend({'阶段':'隔离',**r} for r in result['quarantine'])
     fields=list(dict.fromkeys(['阶段','run_id','规则版本']+[k for r in rows for k in r]))
     writer=csv.DictWriter(out,fieldnames=fields);writer.writeheader()

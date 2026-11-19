@@ -1,11 +1,11 @@
-from app.modules.m6_reconcile.rules import apply
-from copy import deepcopy
-def test_balanced(ctx): assert ctx['balanced'] is True
-def test_zero_differences(ctx): assert all(r['差额']==0 for r in ctx['stages']['6']['rows'])
-def test_stock_invariant(ctx): assert sum(s['available'] for s in ctx['usable'])==sum(ctx['remaining'].values())+sum(a['调拨数量'] for a in ctx['allocations'])
-def test_demand_invariant(ctx): assert 675==sum(x['缺口']+x['已分配'] for x in ctx['shortages'])
-def test_tampered_remaining(ctx):
-    c=deepcopy(ctx);c['remaining']['0002:B0001']+=1;apply(c);assert c['balanced'] is False
-def test_no_allocations_not_zeroed(ctx): assert ctx['stages']['6']['rows'][0]['期初']>0
-def test_reconcile_units(ctx): assert ctx['stages']['6']['metrics'][0][2]=='件'
+from app.domain import allocate
+def test_allocations_whole_packages(ctx): assert all(a['调拨数量']%a['整包装']==0 for a in ctx['allocations'])
+def test_fefo_first(ctx): assert ctx['allocations'][0]['到期日']=='2026-12-02'
+def test_no_negative_remainder(ctx): assert min(ctx['remaining'].values())>=0
+def test_demand_cap(ctx): assert all(a['已分配']<=a['净需求'] for a in ctx['shortages'])
+def test_no_stock(ctx):
+    rows,left,short=allocate([],ctx['net_demands']);assert not rows and sum(x['缺口'] for x in short)==675
+def test_min_life_kept(ctx): assert all(a['到店余期_天']>=10 for a in ctx['allocations'])
+def test_deterministic_order(ctx):
+    assert allocate(list(reversed(ctx['usable'])),list(reversed(ctx['net_demands'])))[0]==ctx['allocations']
 
